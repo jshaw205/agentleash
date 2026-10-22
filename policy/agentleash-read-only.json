@@ -1,0 +1,42 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "AgentleashReadOnly",
+      "Effect": "Allow",
+      "Action": [
+        "bedrock:GetAgent",
+        "bedrock:GetAgentActionGroup",
+        "bedrock:GetDataSource",
+        "bedrock:GetGuardrail",
+        "bedrock:GetKnowledgeBase",
+        "bedrock:ListAgentActionGroups",
+        "bedrock:ListAgentAliases",
+        "bedrock:ListAgentCollaborators",
+        "bedrock:ListAgentKnowledgeBases",
+        "bedrock:ListAgentVersions",
+        "bedrock:ListAgents",
+        "bedrock:ListDataSources",
+        "ec2:DescribeRegions",
+        "iam:GetAccountAuthorizationDetails",
+        "kms:GetKeyPolicy",
+        "kms:ListKeys",
+        "lambda:GetFunctionConfiguration",
+        "lambda:GetPolicy",
+        "lambda:ListFunctions",
+        "organizations:DescribePolicy",
+        "organizations:ListPolicies",
+        "organizations:ListTargetsForPolicy",
+        "s3:GetBucketPolicy",
+        "s3:ListAllMyBuckets",
+        "secretsmanager:GetResourcePolicy",
+        "secretsmanager:ListSecrets",
+        "sns:GetTopicAttributes",
+        "sns:ListTopics",
+        "sqs:GetQueueAttributes",
+        "sqs:ListQueues"
+      ],
+      "Resource": "*"
+    }
+  ]
+}

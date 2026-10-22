@@ -1,0 +1,113 @@
+{
+  "schema_version": 1,
+  "account_id": "111122223333",
+  "regions": ["eu-west-2"],
+  "collected_at": "2026-10-22T00:00:00Z",
+  "agents": [
+    {
+      "agent_id": "AGENT00001",
+      "name": "support-agent",
+      "region": "eu-west-2",
+      "service_role_arn": "arn:aws:iam::111122223333:role/support-agent-service-role",
+      "aliases": ["prod"],
+      "action_groups": [
+        {
+          "name": "TicketOps",
+          "executor_lambda_arn": "arn:aws:lambda:eu-west-2:111122223333:function:lookup-ticket",
+          "function_schema": {
+            "functions": [
+              {
+                "name": "lookup_ticket",
+                "parameters": {
+                  "bucket": {"type": "string", "required": true},
+                  "key": {"type": "string", "required": true}
+                }
+              }
+            ]
+          }
+        }
+      ],
+      "knowledge_base_ids": ["KB00000001"],
+      "user_input_enabled": true
+    }
+  ],
+  "knowledge_bases": [
+    {
+      "knowledge_base_id": "KB00000001",
+      "name": "support-docs",
+      "region": "eu-west-2",
+      "role_arn": "arn:aws:iam::111122223333:role/support-kb-role",
+      "data_source_bucket_arns": ["arn:aws:s3:::support-docs-ingest"]
+    }
+  ],
+  "lambda_functions": [
+    {
+      "arn": "arn:aws:lambda:eu-west-2:111122223333:function:lookup-ticket",
+      "role_arn": "arn:aws:iam::111122223333:role/support-tool-role",
+      "region": "eu-west-2",
+      "environment_variable_names": ["TICKET_TABLE"],
+      "resource_policy": {
+        "Version": "2012-10-17",
+        "Statement": [
+          {
+            "Effect": "Allow",
+            "Principal": {"Service": "bedrock.amazonaws.com"},
+            "Action": "lambda:InvokeFunction",
+            "Resource": "arn:aws:lambda:eu-west-2:111122223333:function:lookup-ticket"
+          }
+        ]
+      }
+    }
+  ],
+  "iam": {
+    "RoleDetailList": [
+      {
+        "RoleName": "support-tool-role",
+        "Arn": "arn:aws:iam::111122223333:role/support-tool-role",
+        "AssumeRolePolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {"Effect": "Allow", "Principal": {"Service": "lambda.amazonaws.com"}, "Action": "sts:AssumeRole"}
+          ]
+        },
+        "RolePolicyList": [
+          {
+            "PolicyName": "assume-anything",
+            "PolicyDocument": {
+              "Version": "2012-10-17",
+              "Statement": [{"Effect": "Allow", "Action": "sts:AssumeRole", "Resource": "*"}]
+            }
+          }
+        ],
+        "AttachedManagedPolicies": []
+      },
+      {
+        "RoleName": "data-reader",
+        "Arn": "arn:aws:iam::111122223333:role/data-reader",
+        "AssumeRolePolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {"Effect": "Allow", "Principal": {"AWS": "arn:aws:iam::111122223333:root"}, "Action": "sts:AssumeRole"}
+          ]
+        },
+        "RolePolicyList": [
+          {
+            "PolicyName": "read-exports",
+            "PolicyDocument": {
+              "Version": "2012-10-17",
+              "Statement": [
+                {"Effect": "Allow", "Action": "s3:GetObject", "Resource": "arn:aws:s3:::customer-exports/*"}
+              ]
+            }
+          }
+        ],
+        "AttachedManagedPolicies": []
+      }
+    ],
+    "UserDetailList": [],
+    "GroupDetailList": [],
+    "Policies": []
+  },
+  "resource_policies": {},
+  "organization_policies": []
+}

@@ -1,0 +1,46 @@
+[build-system]
+requires = ["hatchling>=1.24"]
+build-backend = "hatchling.build"
+
+[project]
+name = "agentleash"
+version = "0.0.1"
+description = "Prompt-injection blast radius for AI agents: what an injected agent can reach in your AWS account."
+readme = "README.md"
+license = "Apache-2.0"
+license-files = ["LICENSE"]
+requires-python = ">=3.12"
+authors = [{ name = "Jamie Shaw" }]
+keywords = ["aws", "iam", "security", "prompt-injection", "ai-agents", "attack-paths"]
+classifiers = [
+  "Development Status :: 2 - Pre-Alpha",
+  "Intended Audience :: Information Technology",
+  "Programming Language :: Python :: 3",
+  "Topic :: Security",
+]
+dependencies = [
+  "boto3>=1.35",
+  "networkx>=3.3",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8",
+  "pytest-socket>=0.7",
+  "ruff>=0.6",
+]
+
+[project.scripts]
+agentleash = "agentleash.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/agentleash"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+# Tests must never reach AWS or any other network endpoint.
+addopts = "--disable-socket"
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
