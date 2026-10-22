@@ -57,4 +57,3 @@ class ReadOnlySession:
             raise OperationNotAllowed(f"{service}:{operation} is not on the read-only allowlist")
         paginator = self.client(service, region).get_paginator(xform_name(operation))
         yield from paginator.paginate(**params)
-

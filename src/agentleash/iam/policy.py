@@ -79,8 +79,17 @@ def evaluate_statement(
     context: Context,
     who: PrincipalRef | None = None,
     source: str = "",
+    resource_is_pattern: bool = False,
 ) -> StatementHit:
     effect = stmt.get("Effect", "Allow")
+    # For a set of resources, an Allow counts if it covers some of them and a
+    # Deny only if it covers all of them, so a partial deny never hides a path.
+    if not resource_is_pattern:
+        in_mode = out_mode = "exact"
+    elif effect == "Allow":
+        in_mode, out_mode = "overlap", "contains"
+    else:
+        in_mode, out_mode = "contains", "overlap"
 
     if "NotAction" in stmt:
         action_ok = not any(match_action(p, action) for p in _as_list(stmt["NotAction"]))
@@ -90,9 +99,13 @@ def evaluate_statement(
         return StatementHit(source, stmt.get("Sid"), effect, Tri.FALSE)
 
     if "NotResource" in stmt:
-        resource_ok = ~any_of(*(match_resource(p, resource) for p in _as_list(stmt["NotResource"])))
+        resource_ok = ~any_of(
+            *(match_resource(p, resource, out_mode) for p in _as_list(stmt["NotResource"]))
+        )
     elif "Resource" in stmt:
-        resource_ok = any_of(*(match_resource(p, resource) for p in _as_list(stmt["Resource"])))
+        resource_ok = any_of(
+            *(match_resource(p, resource, in_mode) for p in _as_list(stmt["Resource"]))
+        )
     else:
         resource_ok = Tri.TRUE  # trust policies and some resource policies omit it
 
@@ -127,6 +140,7 @@ def evaluate_policies(
     context: Context,
     who: PrincipalRef | None = None,
     allow_via_account: bool = True,
+    resource_is_pattern: bool = False,
 ) -> PolicySetResult:
     """Evaluate a set of (source label, document) pairs.
 
@@ -137,13 +151,13 @@ def evaluate_policies(
     hits: list[StatementHit] = []
     for source, document in policies:
         for stmt in _as_list(document.get("Statement")):
-            hit = evaluate_statement(stmt, action, resource, context, who, source)
+            hit = evaluate_statement(
+                stmt, action, resource, context, who, source, resource_is_pattern
+            )
             if hit.value is not Tri.FALSE:
                 hits.append(hit)
     allows = [
-        h.value
-        for h in hits
-        if h.effect == "Allow" and (allow_via_account or not h.via_account)
+        h.value for h in hits if h.effect == "Allow" and (allow_via_account or not h.via_account)
     ]
     denies = [h.value for h in hits if h.effect == "Deny"]
     return PolicySetResult(any_of(*allows), any_of(*denies), hits)

@@ -20,8 +20,14 @@ def test_known_keys_resolve():
 
 def test_like_and_negation():
     block = {"ArnNotLike": {"aws:PrincipalArn": "arn:aws:iam::*:role/admin-*"}}
-    assert evaluate_conditions(block, {"aws:PrincipalArn": ["arn:aws:iam::1:role/app"]}).value is Tri.TRUE
-    assert evaluate_conditions(block, {"aws:PrincipalArn": ["arn:aws:iam::1:role/admin-x"]}).value is Tri.FALSE
+    assert (
+        evaluate_conditions(block, {"aws:PrincipalArn": ["arn:aws:iam::1:role/app"]}).value
+        is Tri.TRUE
+    )
+    assert (
+        evaluate_conditions(block, {"aws:PrincipalArn": ["arn:aws:iam::1:role/admin-x"]}).value
+        is Tri.FALSE
+    )
 
 
 def test_if_exists_and_null():

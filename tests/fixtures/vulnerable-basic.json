@@ -109,5 +109,9 @@
     "Policies": []
   },
   "resource_policies": {},
+  "inventory": {
+    "s3_buckets": ["customer-exports", "support-docs-ingest"],
+    "secrets": ["arn:aws:secretsmanager:eu-west-2:111122223333:secret:prod/db-AbCdEf"]
+  },
   "organization_policies": []
 }

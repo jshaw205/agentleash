@@ -23,6 +23,15 @@ def test_wrong_schema_version_is_rejected():
         snapshot.Snapshot.from_dict({"schema_version": 99})
 
 
-def test_cli_loads_snapshot(capsys):
-    assert main(["scan", "--from-snapshot", str(FIXTURE)]) == 2
-    assert "account 111122223333" in capsys.readouterr().out
+def test_cli_scans_snapshot_and_writes_reports(tmp_path, capsys):
+    out = tmp_path / "out"
+    assert main(["scan", "--from-snapshot", str(FIXTURE), "--output-dir", str(out)]) == 0
+    assert "Account 111122223333" in capsys.readouterr().out
+    assert (out / "findings.json").exists()
+    assert "customer-exports" in (out / "report.md").read_text()
+
+
+def test_cli_fail_on(tmp_path):
+    args = ["scan", "--from-snapshot", str(FIXTURE), "--output-dir", str(tmp_path)]
+    assert main([*args, "--fail-on", "high"]) == 1
+    assert main([*args, "--fail-on", "critical"]) == 0

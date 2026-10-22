@@ -30,7 +30,12 @@ from agentleash.iam.principals import Principal
 from agentleash.iam.tristate import Tri, all_of, any_of
 
 # Actions whose resource policy must allow the caller for the request to succeed.
-RESOURCE_POLICY_REQUIRED = ("kms:*", "sts:AssumeRole", "sts:AssumeRoleWithWebIdentity", "sts:TagSession")
+RESOURCE_POLICY_REQUIRED = (
+    "kms:*",
+    "sts:AssumeRole",
+    "sts:AssumeRoleWithWebIdentity",
+    "sts:TagSession",
+)
 
 PolicyList = Sequence[tuple[str, Mapping[str, Any]]]
 
@@ -50,6 +55,9 @@ class Request:
     # role's aws:PrincipalTag/* keys are filled in automatically.
     context: Mapping[str, Sequence[str] | None] = field(default_factory=dict)
     resource_account: str | None = None
+    # True when ``resource`` is a pattern standing for a set of resources, such
+    # as every object in a bucket. The decision then means "for some of them".
+    resource_is_pattern: bool = False
 
 
 @dataclass
@@ -77,10 +85,21 @@ def _context_for(principal: Principal, request: Request) -> dict[str, Sequence[s
     return ctx
 
 
-def _ceiling(layers: Sequence[PolicyList] | None, request: Request, ctx: Context) -> list[PolicySetResult]:
+def _ceiling(
+    layers: Sequence[PolicyList] | None, request: Request, ctx: Context
+) -> list[PolicySetResult]:
     if not layers:
         return []
-    return [evaluate_policies(list(layer), request.action, request.resource, ctx) for layer in layers]
+    return [
+        evaluate_policies(
+            list(layer),
+            request.action,
+            request.resource,
+            ctx,
+            resource_is_pattern=request.resource_is_pattern,
+        )
+        for layer in layers
+    ]
 
 
 def evaluate(
@@ -90,6 +109,7 @@ def evaluate(
     scps: Sequence[PolicyList] | None = None,
     rcps: Sequence[PolicyList] | None = None,
     session_policies: PolicyList | None = None,
+    resource_policy_label: str = "resource-policy",
 ) -> Result:
     """Decide whether ``principal`` may perform ``request``.
 
@@ -103,25 +123,47 @@ def evaluate(
     resource_account = request.resource_account or arn_account(resource) or principal.account_id
     same_account = resource_account == principal.account_id
     notes: list[str] = []
+    pat = request.resource_is_pattern
 
-    identity = evaluate_policies(principal.identity_policies, action, resource, ctx)
+    identity = evaluate_policies(
+        principal.identity_policies, action, resource, ctx, resource_is_pattern=pat
+    )
     identity_allow = identity.allow
     if principal.missing_policies:
         identity_allow = any_of(identity_allow, Tri.UNKNOWN)
         notes.append("policies not in snapshot: " + ", ".join(principal.missing_policies))
 
     if resource_policy:
-        rp_any = evaluate_policies([("resource-policy", resource_policy)], action, resource, ctx, who)
+        rp_any = evaluate_policies(
+            [(resource_policy_label, resource_policy)],
+            action,
+            resource,
+            ctx,
+            who,
+            resource_is_pattern=pat,
+        )
         rp_direct = evaluate_policies(
-            [("resource-policy", resource_policy)], action, resource, ctx, who, allow_via_account=False
+            [(resource_policy_label, resource_policy)],
+            action,
+            resource,
+            ctx,
+            who,
+            allow_via_account=False,
+            resource_is_pattern=pat,
         )
     else:
         rp_any = rp_direct = PolicySetResult(Tri.FALSE, Tri.FALSE, [])
 
     boundary = (
-        evaluate_policies([principal.boundary], action, resource, ctx) if principal.boundary else None
+        evaluate_policies([principal.boundary], action, resource, ctx, resource_is_pattern=pat)
+        if principal.boundary
+        else None
     )
-    session = evaluate_policies(list(session_policies), action, resource, ctx) if session_policies else None
+    session = (
+        evaluate_policies(list(session_policies), action, resource, ctx, resource_is_pattern=pat)
+        if session_policies
+        else None
+    )
     scp_layers = _ceiling(scps, request, ctx)
     rcp_layers = _ceiling(rcps, request, ctx)
 
@@ -172,5 +214,6 @@ def can_assume(caller: Principal, target: Principal, **kwargs) -> Result:
         caller,
         Request("sts:AssumeRole", target.arn),
         resource_policy=target.trust_policy,
+        resource_policy_label=f"{target.arn}#trust-policy",
         **kwargs,
     )
