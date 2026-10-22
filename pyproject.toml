@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "agentleash"
-version = "0.0.1"
+version = "0.1.0"
 description = "Prompt-injection blast radius for AI agents: what an injected agent can reach in your AWS account."
 readme = "README.md"
 license = "Apache-2.0"
@@ -13,7 +13,7 @@ requires-python = ">=3.12"
 authors = [{ name = "Jamie Shaw" }]
 keywords = ["aws", "iam", "security", "prompt-injection", "ai-agents", "attack-paths"]
 classifiers = [
-  "Development Status :: 2 - Pre-Alpha",
+  "Development Status :: 3 - Alpha",
   "Intended Audience :: Information Technology",
   "Programming Language :: Python :: 3",
   "Topic :: Security",

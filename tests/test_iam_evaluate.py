@@ -38,7 +38,10 @@ def test_matching_rules():
     assert match_action("iam:?etRole", "iam:GetRole")
     assert match_resource("arn:aws:s3:::customer-*/*", BUCKET_OBJ) is Tri.TRUE
     assert match_resource("arn:aws:s3:::Customer-*/*", BUCKET_OBJ) is Tri.FALSE
-    assert match_resource("arn:aws:s3:::home/${aws:username}/*", "arn:aws:s3:::home/bob/x") is Tri.UNKNOWN
+    assert (
+        match_resource("arn:aws:s3:::home/${aws:username}/*", "arn:aws:s3:::home/bob/x")
+        is Tri.UNKNOWN
+    )
 
 
 def test_identity_allow_and_implicit_deny():
@@ -62,7 +65,9 @@ def test_not_action_deny():
 
 
 def test_unknown_condition_makes_allow_conditional():
-    p = role(statements=[allow("s3:GetObject", Condition={"IpAddress": {"aws:SourceIp": "10.0.0.0/8"}})])
+    p = role(
+        statements=[allow("s3:GetObject", Condition={"IpAddress": {"aws:SourceIp": "10.0.0.0/8"}})]
+    )
     result = evaluate(p, Request("s3:GetObject", BUCKET_OBJ))
     assert result.decision is Decision.CONDITIONAL
     assert result.unresolved_keys == {"aws:SourceIp"}
@@ -80,7 +85,9 @@ def test_unknown_deny_condition_makes_allow_conditional():
 
 def test_principal_tags_are_known():
     p = role(
-        statements=[allow("s3:GetObject", Condition={"StringEquals": {"aws:PrincipalTag/team": "data"}})],
+        statements=[
+            allow("s3:GetObject", Condition={"StringEquals": {"aws:PrincipalTag/team": "data"}})
+        ],
         tags={"team": "data"},
     )
     assert evaluate(p, Request("s3:GetObject", BUCKET_OBJ)).allowed
@@ -100,14 +107,23 @@ def test_scp_layers_must_all_allow_and_can_deny():
     full = [("FullAWSAccess", {"Statement": [allow("*")]})]
     no_iam = [("DenyIam", {"Statement": [allow("*"), deny("iam:*")]})]
     s3_only = [("S3Only", {"Statement": [allow("s3:*")]})]
-    assert evaluate(p, Request("iam:CreateUser", "*"), scps=[full, no_iam]).decision is Decision.DENIED
-    assert evaluate(p, Request("ec2:RunInstances", "*"), scps=[full, s3_only]).decision is Decision.NOT_ALLOWED
+    assert (
+        evaluate(p, Request("iam:CreateUser", "*"), scps=[full, no_iam]).decision is Decision.DENIED
+    )
+    assert (
+        evaluate(p, Request("ec2:RunInstances", "*"), scps=[full, s3_only]).decision
+        is Decision.NOT_ALLOWED
+    )
     assert evaluate(p, Request("s3:GetObject", BUCKET_OBJ), scps=[full, s3_only]).allowed
 
 
 def test_same_account_resource_policy_naming_role_is_enough():
     p = role(statements=[])
-    bucket_policy = {"Statement": [allow("s3:GetObject", "arn:aws:s3:::customer-exports/*", Principal={"AWS": p.arn})]}
+    bucket_policy = {
+        "Statement": [
+            allow("s3:GetObject", "arn:aws:s3:::customer-exports/*", Principal={"AWS": p.arn})
+        ]
+    }
     assert evaluate(p, Request("s3:GetObject", BUCKET_OBJ), resource_policy=bucket_policy).allowed
 
 
@@ -115,7 +131,10 @@ def test_resource_policy_naming_account_root_delegates_to_identity():
     p = role(statements=[])
     key = f"arn:aws:kms:eu-west-2:{ACCOUNT}:key/abc"
     key_policy = {"Statement": [allow("kms:*", Principal={"AWS": f"arn:aws:iam::{ACCOUNT}:root"})]}
-    assert evaluate(p, Request("kms:Decrypt", key), resource_policy=key_policy).decision is Decision.NOT_ALLOWED
+    assert (
+        evaluate(p, Request("kms:Decrypt", key), resource_policy=key_policy).decision
+        is Decision.NOT_ALLOWED
+    )
     p2 = role(statements=[allow("kms:Decrypt")])
     assert evaluate(p2, Request("kms:Decrypt", key), resource_policy=key_policy).allowed
 
@@ -134,7 +153,9 @@ def test_cross_account_needs_both_sides():
     assert evaluate(p, Request("sqs:SendMessage", queue), resource_policy=open_policy).allowed
     no_identity = role(statements=[])
     assert (
-        evaluate(no_identity, Request("sqs:SendMessage", queue), resource_policy=open_policy).decision
+        evaluate(
+            no_identity, Request("sqs:SendMessage", queue), resource_policy=open_policy
+        ).decision
         is Decision.NOT_ALLOWED
     )
 
@@ -173,7 +194,10 @@ def test_url_encoded_documents_are_parsed():
             {
                 "Arn": "arn:aws:iam::aws:policy/Managed",
                 "PolicyVersionList": [
-                    {"IsDefaultVersion": True, "Document": {"Statement": [allow("s3:ListAllMyBuckets")]}}
+                    {
+                        "IsDefaultVersion": True,
+                        "Document": {"Statement": [allow("s3:ListAllMyBuckets")]},
+                    }
                 ],
             }
         ],
@@ -181,3 +205,21 @@ def test_url_encoded_documents_are_parsed():
     r = load_roles(details)[f"arn:aws:iam::{ACCOUNT}:role/r"]
     assert r.trust_policy == {"Statement": []}
     assert evaluate(r, Request("s3:ListAllMyBuckets", "*")).allowed
+
+
+def test_pattern_requests_allow_on_overlap_and_deny_on_containment():
+    objects = "arn:aws:s3:::customer-exports/*"
+    scoped = role(statements=[allow("s3:GetObject", "arn:aws:s3:::customer-exports/reports/*")])
+    req = Request("s3:GetObject", objects, resource_is_pattern=True)
+    assert evaluate(scoped, req).allowed
+
+    partial_deny = role(
+        statements=[allow("s3:*"), deny("s3:GetObject", "arn:aws:s3:::customer-exports/private/*")]
+    )
+    assert evaluate(partial_deny, req).allowed
+
+    full_deny = role(statements=[allow("s3:*"), deny("s3:GetObject", "arn:aws:s3:::customer-*")])
+    assert evaluate(full_deny, req).decision is Decision.DENIED
+
+    other_bucket = role(statements=[allow("s3:GetObject", "arn:aws:s3:::other/*")])
+    assert evaluate(other_bucket, req).decision is Decision.NOT_ALLOWED

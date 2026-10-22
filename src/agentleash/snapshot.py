@@ -35,6 +35,9 @@ class Agent:
     name: str
     region: str
     service_role_arn: str
+    # The agent version this record describes: DRAFT or a numbered version an
+    # alias routes to.
+    version: str = "DRAFT"
     aliases: list[str] = field(default_factory=list)
     action_groups: list[ActionGroup] = field(default_factory=list)
     knowledge_base_ids: list[str] = field(default_factory=list)
@@ -52,6 +55,8 @@ class KnowledgeBase:
     role_arn: str
     # S3 data source bucket ARNs: anyone who can write here can inject.
     data_source_bucket_arns: list[str] = field(default_factory=list)
+    # Data source types (S3, WEB, CONFLUENCE, ...). WEB means internet content.
+    data_source_types: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -79,6 +84,11 @@ class Snapshot:
     resource_policies: dict[str, dict[str, Any]] = field(default_factory=dict)
     # Organisation SCPs and RCPs, if collected.
     organization_policies: list[dict[str, Any]] = field(default_factory=list)
+    # Resource inventory by kind: s3_buckets (names), secrets, kms_keys,
+    # sqs_queues and sns_topics (ARNs).
+    inventory: dict[str, list[str]] = field(default_factory=dict)
+    # Calls that failed during collection (access denied, region not enabled).
+    warnings: list[str] = field(default_factory=list)
     schema_version: int = SCHEMA_VERSION
 
     def to_dict(self) -> dict[str, Any]:
@@ -88,7 +98,9 @@ class Snapshot:
     def from_dict(cls, data: dict[str, Any]) -> Snapshot:
         version = data.get("schema_version")
         if version != SCHEMA_VERSION:
-            raise SnapshotError(f"unsupported schema_version {version!r}; expected {SCHEMA_VERSION}")
+            raise SnapshotError(
+                f"unsupported schema_version {version!r}; expected {SCHEMA_VERSION}"
+            )
         for key in ("account_id", "regions", "collected_at"):
             if key not in data:
                 raise SnapshotError(f"snapshot is missing required field {key!r}")
@@ -106,6 +118,8 @@ class Snapshot:
             iam=data.get("iam", {}),
             resource_policies=data.get("resource_policies", {}),
             organization_policies=data.get("organization_policies", []),
+            inventory=data.get("inventory", {}),
+            warnings=data.get("warnings", []),
         )
 
 

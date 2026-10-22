@@ -20,8 +20,9 @@ It assumes the model is fully compromised: the agent will call any tool it has, 
 arguments the tool schema allows. The result is a worst-case blast radius you can use to scope
 IAM, not a guess about whether a given injection would work.
 
-> **Status:** pre-alpha. The read-only AWS layer, snapshot format and CLI skeleton are in place;
-> the IAM evaluator and path analysis are under way. See [the roadmap](#roadmap).
+> **Status:** alpha (0.1.0). Bedrock Agents are supported end to end. Amazon Bedrock AgentCore,
+> organisation SCPs and RCPs, and AssumeRole chains across accounts are next. See
+> [the roadmap](#roadmap).
 
 ## Read-only by design
 
@@ -39,23 +40,56 @@ agentleash only ever makes read-only AWS calls, and you can check that for yours
 ## Usage
 
 ```
-pipx install agentleash
+pipx install git+https://github.com/jshaw205/agentleash   # PyPI release coming soon
 aws sso login --profile audit
 agentleash scan --profile audit --region eu-west-2
 ```
 
 agentleash uses the standard AWS credential chain, so profiles, SSO and environment variables all
-work. Without `--region` it scans every enabled region.
+work. Without `--region` it scans every enabled region. It writes `agentleash-out/report.md` for
+people and `agentleash-out/findings.json` for tooling.
 
-Optional: `--save-snapshot scan.json` keeps what was collected, and
-`--from-snapshot scan.json` re-analyses it without calling AWS.
+| Option | What it does |
+| --- | --- |
+| `--region R` | Scan this region; repeat for several |
+| `--output-dir DIR` | Where to write the report (default `agentleash-out`) |
+| `--max-hops N` | Longest `sts:AssumeRole` chain to follow (default 4) |
+| `--fail-on LEVEL` | Exit 1 if any finding is at or above `critical`, `high`, `medium` or `low` |
+| `--save-snapshot PATH` | Also save what was collected |
+| `--from-snapshot PATH` | Re-analyse a saved snapshot without calling AWS |
+
+## What it checks
+
+For every agent version (the draft and each version an alias routes to), agentleash follows every
+Lambda-backed tool, including tools of collaborator agents, to its execution role and then every
+role reachable by `sts:AssumeRole`. Each role is checked for:
+
+| Impact | Severity | Examples |
+| --- | --- | --- |
+| Escalate privileges | Critical | `iam:CreatePolicyVersion`, `iam:PutRolePolicy`, `iam:PassRole` + `lambda:CreateFunction` |
+| Rewrite agents or their tools | Critical | `bedrock:UpdateAgentActionGroup`, `lambda:UpdateFunctionCode` |
+| Read secrets | High | `secretsmanager:GetSecretValue`, `ssm:GetParameter` |
+| Read data | High | `s3:GetObject`, `dynamodb:Scan` |
+| Modify or delete data | High | `s3:PutObject`, `s3:DeleteObject` |
+| Poison a knowledge base | High | write access to a knowledge base's S3 data source |
+| Decrypt with KMS keys | Medium | `kms:Decrypt` |
+| Send data out of the account | Medium | `s3:PutObject`, `sqs:SendMessage`, `sns:Publish` to another account |
+
+IAM is evaluated statically: identity and resource policies, explicit denies, permissions
+boundaries and condition keys. When a result depends on something only known at request time,
+such as a source IP, the finding is marked conditional, names the condition key, and drops one
+severity level.
+
+It also flags tools that return control to your application, code interpreter, and knowledge
+bases that ingest web content.
 
 ## Roadmap
 
-1. Skeleton: CLI, snapshot schema, read-only AWS layer, fixtures. *(this release)*
+1. Skeleton: CLI, snapshot schema, read-only AWS layer, fixtures.
 2. IAM evaluator: identity and resource policies, explicit deny, permission boundaries, wildcard
    expansion, allowed / denied / conditional results.
 3. First usable release: Bedrock Agents collector, attack-path graph, JSON and Markdown reports.
+   *(this release)*
 4. `sts:AssumeRole` chains, privilege-escalation edges, SCPs and RCPs.
 
 Later: Amazon Bedrock AgentCore, least-privilege policies per tool from CloudTrail, a
